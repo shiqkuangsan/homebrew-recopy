@@ -1,0 +1,96 @@
+name: Update Cask
+
+on:
+  repository_dispatch:
+    types: [update-cask]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to update to (e.g. 1.0.3)"
+        required: true
+
+jobs:
+  update:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "version=${{ github.event.client_payload.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download DMGs and calculate SHA256
+        id: sha
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          AARCH64_URL="https://github.com/shiqkuangsan/Recopy/releases/download/v${VERSION}/Recopy_${VERSION}_aarch64.dmg"
+          X64_URL="https://github.com/shiqkuangsan/Recopy/releases/download/v${VERSION}/Recopy_${VERSION}_x64.dmg"
+
+          echo "Downloading aarch64 DMG..."
+          AARCH64_SHA=$(curl -sL "$AARCH64_URL" | shasum -a 256 | awk '{print $1}')
+          echo "aarch64 SHA256: $AARCH64_SHA"
+
+          echo "Downloading x64 DMG..."
+          X64_SHA=$(curl -sL "$X64_URL" | shasum -a 256 | awk '{print $1}')
+          echo "x64 SHA256: $X64_SHA"
+
+          echo "sha_arm=$AARCH64_SHA" >> "$GITHUB_OUTPUT"
+          echo "sha_intel=$X64_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update Cask
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA_ARM: ${{ steps.sha.outputs.sha_arm }}
+          SHA_INTEL: ${{ steps.sha.outputs.sha_intel }}
+        run: |
+          cat > Casks/recopy.rb << 'CASK'
+          cask "recopy" do
+            arch arm: "aarch64", intel: "x64"
+
+            version "VERSION_PLACEHOLDER"
+            sha256 arm:   "SHA_ARM_PLACEHOLDER",
+                   intel: "SHA_INTEL_PLACEHOLDER"
+
+            url "https://github.com/shiqkuangsan/Recopy/releases/download/v#{version}/Recopy_#{version}_#{arch}.dmg",
+                verified: "github.com/shiqkuangsan/Recopy/"
+            name "Recopy"
+            desc "Clipboard history manager"
+            homepage "https://recopy.pages.dev"
+
+            depends_on macos: ">= :ventura"
+
+            app "Recopy.app"
+
+            zap trash: [
+              "~/Library/Application Support/com.recopy.app",
+              "~/Library/Caches/com.recopy.app",
+              "~/Library/Preferences/com.recopy.app.plist",
+              "~/Library/Saved Application State/com.recopy.app.savedState",
+            ]
+          end
+          CASK
+
+          # Replace placeholders
+          sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/" Casks/recopy.rb
+          sed -i '' "s/SHA_ARM_PLACEHOLDER/${SHA_ARM}/" Casks/recopy.rb
+          sed -i '' "s/SHA_INTEL_PLACEHOLDER/${SHA_INTEL}/" Casks/recopy.rb
+
+          # Fix indentation (heredoc adds extra spaces)
+          sed -i '' 's/^          //' Casks/recopy.rb
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/recopy.rb
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "chore: bump recopy to ${VERSION}"
+          git push
