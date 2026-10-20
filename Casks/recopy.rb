@@ -1,9 +1,9 @@
 cask "recopy" do
   arch arm: "aarch64", intel: "x64"
 
-  version "1.10.0"
-  sha256 arm:   "8f4540720cd89ebf306be9211387bede9478a51f595aaed281fc323ae07338e9",
-         intel: "d62de3e4e1211698db14cc251d12315c5c63413437cc7203fa4cf373571101d2"
+  version "1.11.0"
+  sha256 arm:   "81fd5a6624001b391bc1b6421c3f87b93da0d016db7b6969fdfe1cfb8481a0e4",
+         intel: "fd8797f9796bb0f709da39f33667ecc53371fb276c19207ad7238bf1b06d606f"
 
   url "https://github.com/shiqkuangsan/Recopy/releases/download/v#{version}/Recopy_#{version}_#{arch}.dmg",
       verified: "github.com/shiqkuangsan/Recopy/"
